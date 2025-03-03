@@ -1,0 +1,1604 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Verificación de Turnos</title>
+    <!-- Cargar bibliotecas de terceros -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+    <!-- Agregar jsQR correctamente -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .qr-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .qr-code {
+            text-align: center;
+            margin-bottom: 15px;
+            width: 120px;
+        }
+        .qr-code img {
+            display: block;
+            margin: 0 auto 5px;
+        }
+        .qr-name {
+            font-size: 12px;
+            word-break: break-word;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+        }
+        button.danger {
+            background-color: #f44336;
+        }
+        button.secondary {
+            background-color: #2196F3;
+        }
+        input[type="text"], input[type="time"] {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        select {
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        .form-row {
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .form-row label {
+            margin-right: 10px;
+            min-width: 120px;
+        }
+        #cameraContainer {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        #video {
+            width: 100%;
+            border-radius: 8px;
+        }
+        #scanResult {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .warning {
+            color: orange;
+            font-weight: bold;
+        }
+        .hidden {
+            display: none !important;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .tab-container {
+            display: flex;
+            flex-wrap: wrap;
+            border-bottom: 1px solid #ccc;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            background-color: #f1f1f1;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            border-radius: 5px 5px 0 0;
+        }
+        .tab.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,0.3);
+            border-radius: 50%;
+            border-top-color: #4CAF50;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .person-search {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+        }
+        .person-search input {
+            padding: 8px;
+            margin-right: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            width: 60%;
+        }
+        .person-list {
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .person-item {
+            padding: 8px 12px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .person-item:hover {
+            background-color: #f0f0f0;
+        }
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background-color: #fff;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .card-header h3 {
+            margin: 0;
+        }
+        .section-filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .section-filters label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .section-filters input {
+            margin-right: 5px;
+        }
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .actions button {
+            flex: 1;
+        }
+        .person-tag {
+            background-color: #e9f5e9;
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            padding: 5px 10px;
+            display: inline-block;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        .person-tag button {
+            background: none;
+            border: none;
+            color: #f44336;
+            cursor: pointer;
+            padding: 0 5px;
+            font-size: 14px;
+            margin-left: 5px;
+        }
+        .shift-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background-color: #f9f9f9;
+        }
+        .shift-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .shift-time {
+            color: #4CAF50;
+        }
+        .shift-section {
+            color: #2196F3;
+        }
+        .shift-people {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .section-tag {
+            background-color: #e3f2fd;
+            border: 1px solid #2196F3;
+            border-radius: 4px;
+            padding: 5px 10px;
+            display: inline-block;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        .section-tag button {
+            background: none;
+            border: none;
+            color: #f44336;
+            cursor: pointer;
+            padding: 0 5px;
+            font-size: 14px;
+            margin-left: 5px;
+        }
+        .status-message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status-message.success {
+            color: #155724;
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .status-message.error {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .status-message.warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+        }
+        .status-message.info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sistema de Verificación de Turnos</h1>
+    
+    <div class="tab-container">
+        <div class="tab active" onclick="openTab(event, 'configTab')">Configuración</div>
+        <div class="tab" onclick="openTab(event, 'shiftsTab')">Turnos</div>
+        <div class="tab" onclick="openTab(event, 'qrTab')">Códigos QR</div>
+        <div class="tab" onclick="openTab(event, 'verifyTab')">Verificar</div>
+        <div class="tab" onclick="openTab(event, 'logsTab')">Registros</div>
+    </div>
+    
+    <div id="configTab" class="tab-content active">
+        <div class="section">
+            <h2>Configuración de Turnos</h2>
+            
+            <div class="card">
+                <h3>Rango Horario Global</h3>
+                <div class="form-row">
+                    <label for="startTime">Hora de inicio:</label>
+                    <input type="time" id="startTime" value="12:00">
+                </div>
+                <div class="form-row">
+                    <label for="endTime">Hora de fin:</label>
+                    <input type="time" id="endTime" value="18:45">
+                </div>
+                <div class="form-row">
+                    <label for="shiftDuration">Duración (minutos):</label>
+                    <input type="number" id="shiftDuration" value="60" min="15" step="15">
+                </div>
+                <button id="generateShiftsBtn">Generar Franjas Horarias</button>
+                <div id="shiftGenerationStatus"></div>
+            </div>
+            
+            <div class="card">
+                <h3>Secciones</h3>
+                <div class="form-row">
+                    <input type="text" id="sectionName" placeholder="Nombre de la sección">
+                    <button id="addSectionBtn">Añadir Sección</button>
+                </div>
+                <div id="sectionsContainer">
+                    <!-- Se llenarán dinámicamente -->
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Importar / Exportar Datos</h3>
+                <div class="actions">
+                    <button id="exportDataBtn" class="secondary">Exportar Todos los Datos</button>
+                    <button id="importDataBtn" class="secondary">Importar Datos</button>
+                </div>
+                <input type="file" id="importFileInput" style="display: none;" accept=".json">
+                <div id="importExportStatus"></div>
+            </div>
+            
+            <div class="card">
+                <h3>Limpiar Datos</h3>
+                <p>¡Advertencia! Esta acción eliminará todos los datos configurados.</p>
+                <button id="resetAllBtn" class="danger">Restablecer Todo</button>
+                <div id="resetStatus"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="shiftsTab" class="tab-content">
+        <div class="section">
+            <h2>Gestión de Turnos</h2>
+            
+            <div class="section-filters">
+                <h3>Mostrar secciones:</h3>
+                <div id="shiftSectionFilters">
+                    <!-- Se llenarán dinámicamente -->
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h3>Añadir Personas a Turno</h3>
+                </div>
+                <div class="form-row">
+                    <label for="shiftTimeSelect">Hora:</label>
+                    <select id="shiftTimeSelect">
+                        <!-- Se llenará dinámicamente -->
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label for="shiftSectionSelect">Sección:</label>
+                    <select id="shiftSectionSelect">
+                        <!-- Se llenará dinámicamente -->
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label for="personName">Persona:</label>
+                    <input type="text" id="personName" placeholder="Nombre de la persona">
+                    <button id="addPersonToShiftBtn">Añadir</button>
+                </div>
+            </div>
+            
+            <div id="shiftsContainer">
+                <!-- Aquí se mostrarán los turnos -->
+            </div>
+        </div>
+    </div>
+    
+    <div id="qrTab" class="tab-content">
+        <div class="section">
+            <h2>Códigos QR para Personal</h2>
+            <p>Estos son los códigos QR generados para cada persona en el horario:</p>
+            <div class="qr-container" id="qrCodes"></div>
+        </div>
+    </div>
+    
+    <div id="verifyTab" class="tab-content">
+        <div class="section">
+            <h2>Verificar Asistencia</h2>
+            
+            <div class="section-filters">
+                <h3>Verificar en secciones:</h3>
+                <div id="verifySectionFilters">
+                    <!-- Se llenarán dinámicamente -->
+                </div>
+            </div>
+            
+            <div class="person-search">
+                <h3>Buscar por nombre:</h3>
+                <div>
+                    <input type="text" id="personSearch" placeholder="Escribe el nombre...">
+                    <button id="searchButton">Buscar</button>
+                </div>
+                <div id="personList" class="person-list"></div>
+            </div>
+            
+            <div class="camera-section">
+                <h3>O escanea el código QR:</h3>
+                <button id="startCamera">Abrir Cámara</button>
+                <button id="stopCamera" disabled>Cerrar Cámara</button>
+                <div id="cameraStatus"></div>
+                
+                <div id="cameraContainer" class="hidden">
+                    <video id="video" autoplay></video>
+                    <canvas id="canvas" style="display: none;"></canvas>
+                </div>
+            </div>
+            
+            <div id="scanResult" class="hidden">
+                <h3>Resultado de la verificación:</h3>
+                <div id="resultContent"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="logsTab" class="tab-content">
+        <div class="section">
+            <h2>Registros de Verificación</h2>
+            <p>Historial de verificaciones realizadas:</p>
+            <div class="actions">
+                <button id="downloadLogs">Descargar Registros (Excel)</button>
+                <button id="clearLogs" class="danger">Limpiar Registros</button>
+            </div>
+            <div id="logsStatus"></div>
+            <table id="logsTable">
+                <thead>
+                    <tr>
+                        <th>Fecha/Hora</th>
+                        <th>Nombre</th>
+                        <th>Estado</th>
+                        <th>Turno</th>
+                    </tr>
+                </thead>
+                <tbody id="logsTableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        let shiftsData = {};
+        let personList = [];
+        let verificationLogs = [];
+        let videoStream = null;
+        let scanInterval = null;
+        let timeSlots = [];
+        let sections = ["BARRA", "GRIFO", "TOKENS"];
+        let jsQRAvailable = false;
+        
+        // Verificar si jsQR está disponible
+        try {
+            jsQRAvailable = typeof jsQR === 'function';
+            console.log("jsQR está disponible:", jsQRAvailable);
+        } catch (e) {
+            console.error("jsQR no está disponible:", e);
+            jsQRAvailable = false;
+        }
+        
+        // Elementos DOM
+        const startTimeInput = document.getElementById('startTime');
+        const endTimeInput = document.getElementById('endTime');
+        const shiftDurationInput = document.getElementById('shiftDuration');
+        const generateShiftsBtn = document.getElementById('generateShiftsBtn');
+        const shiftGenerationStatus = document.getElementById('shiftGenerationStatus');
+        const sectionNameInput = document.getElementById('sectionName');
+        const addSectionBtn = document.getElementById('addSectionBtn');
+        const sectionsContainer = document.getElementById('sectionsContainer');
+        const shiftTimeSelect = document.getElementById('shiftTimeSelect');
+        const shiftSectionSelect = document.getElementById('shiftSectionSelect');
+        const personNameInput = document.getElementById('personName');
+        const addPersonToShiftBtn = document.getElementById('addPersonToShiftBtn');
+        const shiftsContainer = document.getElementById('shiftsContainer');
+        const qrCodesContainer = document.getElementById('qrCodes');
+        const startCameraButton = document.getElementById('startCamera');
+        const stopCameraButton = document.getElementById('stopCamera');
+        const cameraContainer = document.getElementById('cameraContainer');
+        const cameraStatus = document.getElementById('cameraStatus');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const personSearchInput = document.getElementById('personSearch');
+        const searchButton = document.getElementById('searchButton');
+        const personListDiv = document.getElementById('personList');
+        const scanResult = document.getElementById('scanResult');
+        const resultContent = document.getElementById('resultContent');
+        const logsTableBody = document.getElementById('logsTableBody');
+        const logsStatus = document.getElementById('logsStatus');
+        const downloadLogsButton = document.getElementById('downloadLogs');
+        const clearLogsButton = document.getElementById('clearLogs');
+        const shiftSectionFilters = document.getElementById('shiftSectionFilters');
+        const verifySectionFilters = document.getElementById('verifySectionFilters');
+        const exportDataBtn = document.getElementById('exportDataBtn');
+        const importDataBtn = document.getElementById('importDataBtn');
+        const importFileInput = document.getElementById('importFileInput');
+        const importExportStatus = document.getElementById('importExportStatus');
+        const resetAllBtn = document.getElementById('resetAllBtn');
+        const resetStatus = document.getElementById('resetStatus');
+        
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            generateShiftsBtn.addEventListener('click', generateTimeSlots);
+            addSectionBtn.addEventListener('click', addSection);
+            addPersonToShiftBtn.addEventListener('click', addPersonToShift);
+            startCameraButton.addEventListener('click', startCamera);
+            stopCameraButton.addEventListener('click', stopCamera);
+            searchButton.addEventListener('click', searchPerson);
+            personSearchInput.addEventListener('input', updatePersonListSearch);
+            downloadLogsButton.addEventListener('click', downloadLogsAsExcel);
+            clearLogsButton.addEventListener('click', clearAllLogs);
+            exportDataBtn.addEventListener('click', exportAllData);
+            importDataBtn.addEventListener('click', () => importFileInput.click());
+            importFileInput.addEventListener('change', importDataFromFile);
+            resetAllBtn.addEventListener('click', resetAllData);
+            
+            // Verificar si la cámara está disponible
+            if (!jsQRAvailable) {
+                startCameraButton.disabled = true;
+                cameraStatus.innerHTML = '<p class="status-message warning">La biblioteca para escanear QR no está disponible. Usa la búsqueda por nombre.</p>';
+            }
+            
+            // Cargar datos guardados
+            loadStoredData();
+            
+            // Si no hay datos guardados, generar franjas horarias por defecto
+            if (!timeSlots || timeSlots.length === 0) {
+                generateTimeSlots();
+            } else {
+                updateShiftTimeSelect();
+                updateSectionFilters();
+                updateSectionsDisplay();
+                updateShiftsDisplay();
+            }
+        });
+        
+        // Función para cambiar entre pestañas
+        function openTab(evt, tabName) {
+            const tabContents = document.getElementsByClassName('tab-content');
+            for (let i = 0; i < tabContents.length; i++) {
+                tabContents[i].className = tabContents[i].className.replace(' active', '');
+            }
+            
+            const tabs = document.getElementsByClassName('tab');
+            for (let i = 0; i < tabs.length; i++) {
+                tabs[i].className = tabs[i].className.replace(' active', '');
+            }
+            
+            document.getElementById(tabName).className += ' active';
+            evt.currentTarget.className += ' active';
+            
+            // Actualizar contenido específico al cambiar de pestaña
+            if (tabName === 'qrTab') {
+                generateQRCodes();
+            }
+        }
+        
+        // Cargar datos almacenados
+        function loadStoredData() {
+            const savedShifts = localStorage.getItem('shiftsData');
+            const savedPersons = localStorage.getItem('personList');
+            const savedTimeSlots = localStorage.getItem('timeSlots');
+            const savedSections = localStorage.getItem('sections');
+            const savedLogs = localStorage.getItem('verificationLogs');
+            
+            if (savedShifts) {
+                shiftsData = JSON.parse(savedShifts);
+            } else {
+                shiftsData = {};
+            }
+            
+            if (savedPersons) {
+                personList = JSON.parse(savedPersons);
+            }
+            
+            if (savedTimeSlots) {
+                timeSlots = JSON.parse(savedTimeSlots);
+                updateShiftTimeSelect();
+            }
+            
+            if (savedSections) {
+                sections = JSON.parse(savedSections);
+                updateSectionsDisplay();
+                updateSectionFilters();
+            }
+            
+            if (savedLogs) {
+                verificationLogs = JSON.parse(savedLogs);
+                updateLogsTable();
+            }
+        }
+        
+        // Guardar datos
+        function saveData() {
+            localStorage.setItem('shiftsData', JSON.stringify(shiftsData));
+            localStorage.setItem('personList', JSON.stringify(personList));
+            localStorage.setItem('timeSlots', JSON.stringify(timeSlots));
+            localStorage.setItem('sections', JSON.stringify(sections));
+        }
+        
+        // Generar franjas horarias
+        function generateTimeSlots() {
+            const startTime = startTimeInput.value;
+            const endTime = endTimeInput.value;
+            const duration = parseInt(shiftDurationInput.value);
+            
+            if (!startTime || !endTime || !duration) {
+                showStatusMessage(shiftGenerationStatus, 'Por favor, completa todos los campos.', 'error');
+                return;
+            }
+            
+            // Convertir horas a minutos para cálculos
+            const startMinutes = timeToMinutes(startTime);
+            const endMinutes = timeToMinutes(endTime);
+            
+            if (startMinutes >= endMinutes) {
+                showStatusMessage(shiftGenerationStatus, 'La hora de fin debe ser posterior a la hora de inicio.', 'error');
+                return;
+            }
+            
+            // Generar franjas horarias
+            timeSlots = [];
+            let currentMinutes = startMinutes;
+            
+            while (currentMinutes + duration <= endMinutes) {
+                const slotStart = minutesToTime(currentMinutes);
+                const slotEnd = minutesToTime(currentMinutes + duration);
+                
+                timeSlots.push({
+                    start: slotStart,
+                    end: slotEnd,
+                    display: `${slotStart} - ${slotEnd}`
+                });
+                
+                currentMinutes += duration;
+            }
+            
+            // Si queda un espacio final más corto, añadirlo también
+            if (currentMinutes < endMinutes) {
+                const slotStart = minutesToTime(currentMinutes);
+                const slotEnd = minutesToTime(endMinutes);
+                
+                timeSlots.push({
+                    start: slotStart,
+                    end: slotEnd,
+                    display: `${slotStart} - ${slotEnd}`
+                });
+            }
+            
+            // Inicializar estructura de datos de turnos
+            resetShiftsData();
+            
+            // Actualizar selects y visualización
+            updateShiftTimeSelect();
+            updateShiftsDisplay();
+            
+            // Guardar datos
+            saveData();
+            
+            showStatusMessage(shiftGenerationStatus, 'Franjas horarias generadas correctamente.', 'success');
+        }
+        
+        // Resetear datos de turnos
+        function resetShiftsData() {
+            shiftsData = {};
+            
+            // Inicializar estructura
+            sections.forEach(section => {
+                shiftsData[section] = {};
+                
+                timeSlots.forEach(slot => {
+                    shiftsData[section][slot.display] = [];
+                });
+            });
+        }
+        
+        // Convertir hora en formato HH:MM a minutos
+        function timeToMinutes(time) {
+            const [hours, minutes] = time.split(':').map(Number);
+            return hours * 60 + minutes;
+        }
+        
+        // Convertir minutos a formato HH:MM
+        function minutesToTime(minutes) {
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+        }
+        
+        // Actualizar select de franjas horarias
+        function updateShiftTimeSelect() {
+            shiftTimeSelect.innerHTML = '';
+            
+            timeSlots.forEach(slot => {
+                const option = document.createElement('option');
+                option.value = slot.display;
+                option.textContent = slot.display;
+                shiftTimeSelect.appendChild(option);
+            });
+        }
+        
+        // Añadir sección
+        function addSection() {
+            const sectionName = sectionNameInput.value.trim().toUpperCase();
+            
+            if (!sectionName) {
+                alert('Por favor, ingresa un nombre para la sección.');
+                return;
+            }
+            
+            if (sections.includes(sectionName)) {
+                alert('Esta sección ya existe.');
+                return;
+            }
+            
+            sections.push(sectionName);
+            sectionNameInput.value = '';
+            
+            // Actualizar la visualización de secciones
+            updateSectionsDisplay();
+            
+            // Inicializar datos para la nueva sección
+            shiftsData[sectionName] = {};
+            timeSlots.forEach(slot => {
+                shiftsData[sectionName][slot.display] = [];
+            });
+            
+            // Actualizar filtros de sección
+            updateSectionFilters();
+            
+            // Guardar datos
+            saveData();
+        }
+        
+        // Eliminar sección
+        function removeSection(sectionName) {
+            if (!confirm(`¿Estás seguro de que deseas eliminar la sección ${sectionName}?`)) {
+                return;
+            }
+            
+            const index = sections.indexOf(sectionName);
+            if (index !== -1) {
+                sections.splice(index, 1);
+                
+                // Eliminar datos de esta sección
+                delete shiftsData[sectionName];
+                
+                // Actualizar lista de personas
+                refreshPersonList();
+                
+                // Actualizar visualizaciones
+                updateSectionsDisplay();
+                updateSectionFilters();
+                updateShiftsDisplay();
+                
+                // Guardar datos
+                saveData();
+            }
+        }
+        
+        // Actualizar visualización de secciones
+        function updateSectionsDisplay() {
+            sectionsContainer.innerHTML = '';
+            
+            sections.forEach(section => {
+                const sectionTag = document.createElement('div');
+                sectionTag.className = 'section-tag';
+                sectionTag.dataset.section = section;
+                sectionTag.innerHTML = `${section} <button onclick="removeSection('${section}')">×</button>`;
+                sectionsContainer.appendChild(sectionTag);
+            });
+            
+            // Actualizar también el select de secciones
+            shiftSectionSelect.innerHTML = '';
+            sections.forEach(section => {
+                const option = document.createElement('option');
+                option.value = section;
+                option.textContent = section;
+                shiftSectionSelect.appendChild(option);
+            });
+        }
+        
+        // Actualizar filtros de sección
+        function updateSectionFilters() {
+            // Limpiar contenedores de filtros
+            shiftSectionFilters.innerHTML = '';
+            verifySectionFilters.innerHTML = '';
+            
+            sections.forEach(section => {
+                // Filtro para la pestaña de turnos
+                const shiftLabel = document.createElement('label');
+                const shiftCheckbox = document.createElement('input');
+                shiftCheckbox.type = 'checkbox';
+                shiftCheckbox.className = 'section-filter';
+                shiftCheckbox.value = section;
+                shiftCheckbox.checked = true;
+                shiftCheckbox.addEventListener('change', updateShiftsDisplay);
+                shiftLabel.appendChild(shiftCheckbox);
+                shiftLabel.appendChild(document.createTextNode(` ${section}`));
+                shiftSectionFilters.appendChild(shiftLabel);
+                
+                // Filtro para la pestaña de verificación
+                const verifyLabel = document.createElement('label');
+                const verifyCheckbox = document.createElement('input');
+                verifyCheckbox.type = 'checkbox';
+                verifyCheckbox.className = 'verify-section-filter';
+                verifyCheckbox.value = section;
+                verifyCheckbox.checked = true;
+                verifyLabel.appendChild(verifyCheckbox);
+                verifyLabel.appendChild(document.createTextNode(` ${section}`));
+                verifySectionFilters.appendChild(verifyLabel);
+            });
+        }
+        
+        // Añadir persona a turno
+        function addPersonToShift() {
+            const timeSlot = shiftTimeSelect.value;
+            const section = shiftSectionSelect.value;
+            const personName = personNameInput.value.trim();
+            
+            if (!timeSlot || !section || !personName) {
+                alert('Por favor, completa todos los campos.');
+                return;
+            }
+            
+            // Asegurarse de que la estructura de datos exista
+            if (!shiftsData[section]) {
+                shiftsData[section] = {};
+            }
+            
+            if (!shiftsData[section][timeSlot]) {
+                shiftsData[section][timeSlot] = [];
+            }
+            
+            // Verificar si la persona ya está en este turno
+            if (shiftsData[section][timeSlot].includes(personName)) {
+                alert(`${personName} ya está asignado a este turno.`);
+                return;
+            }
+            
+            // Añadir persona al turno
+            shiftsData[section][timeSlot].push(personName);
+            
+            // Añadir a lista general de personas si no existe
+            if (!personList.includes(personName)) {
+                personList.push(personName);
+                personList.sort((a, b) => a.localeCompare(b, 'es'));
+            }
+            
+            // Limpiar campo de persona
+            personNameInput.value = '';
+            
+            // Actualizar visualización y guardar
+            updateShiftsDisplay();
+            saveData();
+        }
+        
+        // Eliminar persona de turno
+        function removePersonFromShift(section, timeSlot, personName) {
+            if (!shiftsData[section] || !shiftsData[section][timeSlot]) {
+                return;
+            }
+            
+            const index = shiftsData[section][timeSlot].indexOf(personName);
+            if (index !== -1) {
+                shiftsData[section][timeSlot].splice(index, 1);
+                
+                // Verificar si esta persona está en algún otro turno
+                refreshPersonList();
+                
+                // Actualizar visualización y guardar
+                updateShiftsDisplay();
+                saveData();
+            }
+        }
+        
+        // Refrescar lista de personas basada en los turnos actuales
+        function refreshPersonList() {
+            // Crear una lista temporal de todas las personas en todos los turnos
+            const allPeople = new Set();
+            
+            // Recorrer todos los turnos y secciones
+            for (const section in shiftsData) {
+                for (const timeSlot in shiftsData[section]) {
+                    shiftsData[section][timeSlot].forEach(person => {
+                        allPeople.add(person);
+                    });
+                }
+            }
+            
+            // Actualizar la lista de personas
+            personList = Array.from(allPeople);
+            personList.sort((a, b) => a.localeCompare(b, 'es'));
+            
+            saveData();
+        }
+        
+        // Actualizar visualización de turnos
+        function updateShiftsDisplay() {
+            shiftsContainer.innerHTML = '';
+            
+            // Obtener secciones filtradas
+            const selectedSections = [];
+            document.querySelectorAll('.section-filter:checked').forEach(checkbox => {
+                selectedSections.push(checkbox.value);
+            });
+            
+            if (selectedSections.length === 0) {
+                shiftsContainer.innerHTML = '<p class="status-message warning">Por favor, selecciona al menos una sección para mostrar.</p>';
+                return;
+            }
+            
+            // Verificar que hay franjas horarias
+            if (!timeSlots || timeSlots.length === 0) {
+                shiftsContainer.innerHTML = '<p class="status-message warning">No hay franjas horarias definidas. Por favor, configura las franjas horarias primero.</p>';
+                return;
+            }
+            
+            let turnos = 0;
+            
+            // Para cada franja horaria
+            timeSlots.forEach(slot => {
+                const timeSlot = slot.display;
+                
+                // Para cada sección seleccionada
+                selectedSections.forEach(section => {
+                    if (!shiftsData[section] || !shiftsData[section][timeSlot]) {
+                        return;
+                    }
+                    
+                    const people = shiftsData[section][timeSlot];
+                    
+                    if (people.length === 0) {
+                        return; // No mostrar turnos vacíos
+                    }
+                    
+                    turnos++;
+                    
+                    // Crear tarjeta de turno
+                    const shiftCard = document.createElement('div');
+                    shiftCard.className = 'shift-card';
+                    
+                    const shiftHeader = document.createElement('div');
+                    shiftHeader.className = 'shift-header';
+                    
+                    const shiftTime = document.createElement('span');
+                    shiftTime.className = 'shift-time';
+                    shiftTime.textContent = timeSlot;
+                    
+                    const shiftSection = document.createElement('span');
+                    shiftSection.className = 'shift-section';
+                    shiftSection.textContent = section;
+                    
+                    shiftHeader.appendChild(shiftTime);
+                    shiftHeader.appendChild(shiftSection);
+                    
+                    const shiftPeople = document.createElement('div');
+                    shiftPeople.className = 'shift-people';
+                    
+                    people.forEach(person => {
+                        const personTag = document.createElement('div');
+                        personTag.className = 'person-tag';
+                        personTag.innerHTML = `${person} <button onclick="removePersonFromShift('${section}', '${timeSlot}', '${person}')">×</button>`;
+                        shiftPeople.appendChild(personTag);
+                    });
+                    
+                    shiftCard.appendChild(shiftHeader);
+                    shiftCard.appendChild(shiftPeople);
+                    
+                    shiftsContainer.appendChild(shiftCard);
+                });
+            });
+            
+            if (turnos === 0) {
+                shiftsContainer.innerHTML = '<p class="status-message info">No hay turnos configurados para las secciones seleccionadas.</p>';
+            }
+        }
+        
+        // Generar códigos QR para cada persona
+        function generateQRCodes() {
+            qrCodesContainer.innerHTML = '';
+            
+            // Verificar que hay personas en la lista
+            if (!personList || personList.length === 0) {
+                qrCodesContainer.innerHTML = '<p class="status-message warning">No hay personas en la lista. Por favor, añade personas a los turnos primero.</p>';
+                return;
+            }
+            
+            // Refrescar la lista de personas para asegurar que está actualizada
+            refreshPersonList();
+            
+            personList.forEach(person => {
+                try {
+                    // Crear contenedor para el código QR
+                    const qrDiv = document.createElement('div');
+                    qrDiv.className = 'qr-code';
+                    
+                    // Generar el código QR
+                    const qr = qrcode(4, 'L');
+                    qr.addData(person);
+                    qr.make();
+                    const qrImg = qr.createImgTag(3);
+                    
+                    // Agregar el código QR y el nombre
+                    qrDiv.innerHTML = qrImg;
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'qr-name';
+                    nameDiv.textContent = person;
+                    qrDiv.appendChild(nameDiv);
+                    
+                    qrCodesContainer.appendChild(qrDiv);
+                } catch (error) {
+                    console.error(`Error al generar QR para ${person}:`, error);
+                }
+            });
+        }
+        
+        // Iniciar la cámara para escanear
+        async function startCamera() {
+            // Verificar si jsQR está disponible
+            if (!jsQRAvailable) {
+                cameraStatus.innerHTML = '<p class="status-message error">La biblioteca para escanear QR no está disponible. Por favor, usa la búsqueda por nombre.</p>';
+                return;
+            }
+            
+            try {
+                cameraStatus.innerHTML = '<div class="loading"></div> Iniciando cámara...';
+                
+                const constraints = {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                };
+                
+                videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = videoStream;
+                cameraContainer.classList.remove('hidden');
+                scanResult.classList.add('hidden');
+                cameraStatus.innerHTML = '';
+                
+                startCameraButton.disabled = true;
+                stopCameraButton.disabled = false;
+                
+                // Iniciar el escaneo de QR
+                scanInterval = setInterval(scanQRCode, 500);
+            } catch (error) {
+                console.error('Error al acceder a la cámara:', error);
+                videoStream = null;
+                cameraStatus.innerHTML = `<p class="status-message error">No se pudo acceder a la cámara: ${error.message}<br>Usa la búsqueda por nombre como alternativa.</p>`;
+            }
+        }
+        
+        // Detener la cámara
+        function stopCamera() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+                video.srcObject = null;
+            }
+            
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
+            }
+            
+            cameraContainer.classList.add('hidden');
+            startCameraButton.disabled = false;
+            stopCameraButton.disabled = true;
+            cameraStatus.innerHTML = '';
+        }
+        
+        // Escanear código QR
+        function scanQRCode() {
+            if (!jsQRAvailable) return;
+            if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+            
+            try {
+                const videoWidth = video.videoWidth;
+                const videoHeight = video.videoHeight;
+                
+                if (!videoWidth || !videoHeight) return;
+                
+                canvas.width = videoWidth;
+                canvas.height = videoHeight;
+                
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
+                
+                const imageData = ctx.getImageData(0, 0, videoWidth, videoHeight);
+                const code = jsQR(imageData.data, videoWidth, videoHeight);
+                
+                if (code) {
+                    // Detener el escaneo una vez que se encuentra un código
+                    clearInterval(scanInterval);
+                    scanInterval = null;
+                    
+                    const personName = code.data;
+                    console.log('QR escaneado:', personName);
+                    
+                    // Verificar si la persona está en su turno
+                    checkSchedule(personName);
+                }
+            } catch (error) {
+                console.error('Error al escanear QR:', error);
+                clearInterval(scanInterval);
+                scanInterval = null;
+                cameraStatus.innerHTML = `<p class="status-message error">Error al escanear QR: ${error.message}</p>`;
+            }
+        }
+        
+        // Actualizar lista de personas para búsqueda
+        function updatePersonListSearch() {
+            const searchTerm = personSearchInput.value.toLowerCase();
+            personListDiv.innerHTML = '';
+            
+            if (!personList || personList.length === 0) {
+                personListDiv.innerHTML = '<p class="status-message warning" style="padding: 10px;">No hay personas en la lista. Por favor, añade personas a los turnos primero.</p>';
+                return;
+            }
+            
+            if (searchTerm.length < 2) {
+                personListDiv.innerHTML = '<p style="padding: 10px;">Escribe al menos 2 caracteres para buscar.</p>';
+                return;
+            }
+            
+            // Filtrar personas según el término de búsqueda
+            const filteredPersons = personList.filter(person => 
+                person.toLowerCase().includes(searchTerm)
+            );
+            
+            if (filteredPersons.length === 0) {
+                personListDiv.innerHTML = '<p style="padding: 10px;">No se encontraron coincidencias.</p>';
+                return;
+            }
+            
+            // Limitar a 10 resultados para no sobrecargar la pantalla
+            const maxResults = Math.min(filteredPersons.length, 10);
+            
+            for (let i = 0; i < maxResults; i++) {
+                const personItem = document.createElement('div');
+                personItem.className = 'person-item';
+                personItem.textContent = filteredPersons[i];
+                personItem.addEventListener('click', () => {
+                    personSearchInput.value = filteredPersons[i];
+                    personListDiv.innerHTML = '';
+                });
+                personListDiv.appendChild(personItem);
+            }
+            
+            if (filteredPersons.length > 10) {
+                const moreItem = document.createElement('div');
+                moreItem.className = 'person-item';
+                moreItem.textContent = `... y ${filteredPersons.length - 10} más`;
+                moreItem.style.fontStyle = 'italic';
+                personListDiv.appendChild(moreItem);
+            }
+        }
+        
+        // Buscar persona por nombre
+        function searchPerson() {
+            const personName = personSearchInput.value.trim();
+            
+            if (!personName) {
+                alert('Por favor, ingresa un nombre para buscar.');
+                return;
+            }
+            
+            checkSchedule(personName);
+        }
+        
+        // Verificar si la persona está en su turno según el horario
+        function checkSchedule(personName) {
+            // Verificar si hay datos de turnos
+            if (!shiftsData || Object.keys(shiftsData).length === 0) {
+                showResult(false, personName, 'No hay datos de turnos configurados.');
+                return;
+            }
+            
+            // Verificar si la persona existe en la lista (búsqueda exacta o parcial)
+            let matchedPerson = null;
+            
+            // Primero intentar coincidencia exacta
+            if (personList.includes(personName)) {
+                matchedPerson = personName;
+            } else {
+                // Si no hay coincidencia exacta, buscar parcial
+                const matches = personList.filter(p => 
+                    p.toLowerCase().includes(personName.toLowerCase()) || 
+                    personName.toLowerCase().includes(p.toLowerCase())
+                );
+                
+                if (matches.length === 1) {
+                    // Si solo hay una coincidencia parcial, usarla
+                    matchedPerson = matches[0];
+                } else if (matches.length > 1) {
+                    // Si hay múltiples coincidencias, informar
+                    showResult(false, personName, `Nombre ambiguo: coincide con ${matches.length} personas. Por favor, proporciona un nombre más específico.`);
+                    return;
+                }
+            }
+            
+            if (!matchedPerson) {
+                showResult(false, personName, 'Persona no encontrada en la lista de turnos.');
+                return;
+            }
+            
+            // Usar el nombre exacto para verificación posterior
+            personName = matchedPerson;
+            
+            // Obtener la hora actual
+            const now = new Date();
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+            const currentTime = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+            
+            // Obtener secciones a verificar
+            const sectionsToCheck = [];
+            document.querySelectorAll('.verify-section-filter:checked').forEach(checkbox => {
+                sectionsToCheck.push(checkbox.value);
+            });
+            
+            if (sectionsToCheck.length === 0) {
+                showResult(false, personName, 'Por favor, selecciona al menos una sección para verificar.');
+                return;
+            }
+            
+            // Buscar si la persona está en algún turno actual
+            let isInCurrentShift = false;
+            let currentShiftInfo = '';
+            let allShifts = [];
+            
+            // Para cada sección a verificar
+            sectionsToCheck.forEach(section => {
+                if (!shiftsData[section]) return;
+                
+                // Para cada franja horaria
+                for (const timeRange in shiftsData[section]) {
+                    const timeSlot = findTimeSlotByDisplay(timeRange);
+                    
+                    if (!timeSlot) continue;
+                    
+                    // Comprobar si la persona está en este turno
+                    if (shiftsData[section][timeRange].includes(personName)) {
+                        // Añadir a la lista de todos los turnos
+                        allShifts.push(`${section} - ${timeRange}`);
+                        
+                        // Verificar si es el turno actual
+                        if (isTimeInRange(currentTime, timeSlot.start, timeSlot.end)) {
+                            isInCurrentShift = true;
+                            currentShiftInfo = `${section} - ${timeRange}`;
+                        }
+                    }
+                }
+            });
+            
+            // Mostrar el resultado
+            if (isInCurrentShift) {
+                showResult(true, personName, `Turno confirmado: ${currentShiftInfo}`);
+                logVerification(personName, true, currentShiftInfo);
+            } else {
+                if (allShifts.length > 0) {
+                    const shiftsInfo = allShifts.join('<br>');
+                    showResult(false, personName, `No tiene turno asignado en este momento.<br>Turnos programados:<br>${shiftsInfo}`);
+                } else {
+                    showResult(false, personName, `No tiene turnos asignados en las secciones seleccionadas.`);
+                }
+                
+                logVerification(personName, false, 'Sin turno actual');
+            }
+            
+            // Si estamos usando la cámara, reiniciar el escaneo después de 3 segundos
+            if (videoStream) {
+                setTimeout(() => {
+                    if (videoStream) {
+                        scanInterval = setInterval(scanQRCode, 500);
+                    }
+                }, 3000);
+            }
+        }
+        
+        // Encontrar objeto de franja horaria por su nombre de visualización
+        function findTimeSlotByDisplay(display) {
+            return timeSlots.find(slot => slot.display === display);
+        }
+        
+        // Verificar si una hora está dentro de un rango
+        function isTimeInRange(time, start, end) {
+            const timeMinutes = timeToMinutes(time);
+            const startMinutes = timeToMinutes(start);
+            const endMinutes = timeToMinutes(end);
+            
+            return timeMinutes >= startMinutes && timeMinutes <= endMinutes;
+        }
+        
+        // Mostrar el resultado de la verificación
+        function showResult(isSuccess, personName, message) {
+            scanResult.classList.remove('hidden');
+            resultContent.innerHTML = `
+                <p class="${isSuccess ? 'success' : 'error'}">
+                    <strong>Persona:</strong> ${personName}<br>
+                    <strong>Estado:</strong> ${isSuccess ? '✅ TURNO VÁLIDO' : '❌ SIN TURNO ASIGNADO'}<br>
+                    <strong>Detalle:</strong> ${message}
+                </p>
+            `;
+        }
+        
+        // Registrar la verificación
+        function logVerification(personName, isSuccess, details) {
+            const now = new Date();
+            const logEntry = {
+                timestamp: now.toLocaleString(),
+                name: personName,
+                status: isSuccess ? 'VÁLIDO' : 'INVÁLIDO',
+                details: details
+            };
+            
+            verificationLogs.push(logEntry);
+            updateLogsTable();
+            
+            // Guardar en localStorage
+            localStorage.setItem('verificationLogs', JSON.stringify(verificationLogs));
+        }
+        
+        // Actualizar la tabla de registros
+        function updateLogsTable() {
+            logsTableBody.innerHTML = '';
+            
+            if (verificationLogs.length === 0) {
+                logsTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No hay registros de verificación.</td></tr>';
+                return;
+            }
+            
+            // Ordenar registros por fecha (más recientes primero)
+            const sortedLogs = [...verificationLogs].reverse();
+            
+            sortedLogs.forEach(log => {
+                const row = document.createElement('tr');
+                
+                const timestampCell = document.createElement('td');
+                timestampCell.textContent = log.timestamp;
+                row.appendChild(timestampCell);
+                
+                const nameCell = document.createElement('td');
+                nameCell.textContent = log.name;
+                row.appendChild(nameCell);
+                
+                const statusCell = document.createElement('td');
+                statusCell.textContent = log.status;
+                statusCell.className = log.status === 'VÁLIDO' ? 'success' : 'error';
+                row.appendChild(statusCell);
+                
+                const detailsCell = document.createElement('td');
+                detailsCell.textContent = log.details;
+                row.appendChild(detailsCell);
+                
+                logsTableBody.appendChild(row);
+            });
+        }
+        
+        // Descargar los registros como Excel
+        function downloadLogsAsExcel() {
+            if (verificationLogs.length === 0) {
+                alert('No hay registros para descargar.');
+                return;
+            }
+            
+            try {
+                // Crear una hoja de cálculo
+                const worksheet = XLSX.utils.json_to_sheet(verificationLogs);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Registros');
+                
+                // Generar el archivo
+                const now = new Date();
+                const filename = `registros_verificacion_${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}.xlsx`;
+                
+                XLSX.writeFile(workbook, filename);
+                
+                showStatusMessage(logsStatus, 'Registros descargados correctamente.', 'success');
+            } catch (error) {
+                console.error('Error al descargar registros:', error);
+                showStatusMessage(logsStatus, `Error al descargar registros: ${error.message}`, 'error');
+            }
+        }
+        
+        // Limpiar todos los registros
+        function clearAllLogs() {
+            if (confirm('¿Estás seguro de que deseas borrar todos los registros?')) {
+                verificationLogs = [];
+                updateLogsTable();
+                localStorage.setItem('verificationLogs', JSON.stringify(verificationLogs));
+                showStatusMessage(logsStatus, 'Registros eliminados correctamente.', 'success');
+            }
+        }
+        
+        // Exportar todos los datos
+        function exportAllData() {
+            try {
+                // Crear objeto con todos los datos
+                const allData = {
+                    shiftsData: shiftsData,
+                    personList: personList,
+                    timeSlots: timeSlots,
+                    sections: sections,
+                    verificationLogs: verificationLogs,
+                    exportDate: new Date().toISOString()
+                };
+                
+                // Convertir a JSON
+                const jsonData = JSON.stringify(allData, null, 2);
+                
+                // Crear un blob con los datos
+                const blob = new Blob([jsonData], { type: 'application/json' });
+                
+                // Crear URL para descargar
+                const url = URL.createObjectURL(blob);
+                
+                // Crear link de descarga
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `turnos_export_${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                
+                // Limpiar
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 0);
+                
+                showStatusMessage(importExportStatus, 'Datos exportados correctamente.', 'success');
+            } catch (error) {
+                console.error('Error al exportar datos:', error);
+                showStatusMessage(importExportStatus, `Error al exportar datos: ${error.message}`, 'error');
+            }
+        }
+        
+        // Importar datos desde archivo
+        function importDataFromFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    // Verificar que hay datos requeridos
+                    if (!data.shiftsData || !data.timeSlots || !data.sections) {
+                        throw new Error('El archivo no contiene los datos necesarios.');
+                    }
+                    
+                    // Importar datos
+                    shiftsData = data.shiftsData;
+                    timeSlots = data.timeSlots;
+                    sections = data.sections;
+                    personList = data.personList || [];
+                    
+                    // Importar registros si existen
+                    if (data.verificationLogs) {
+                        if (confirm('¿Deseas importar también los registros de verificación?')) {
+                            verificationLogs = data.verificationLogs;
+                        }
+                    }
+                    
+                    // Actualizar visualizaciones
+                    updateShiftTimeSelect();
+                    updateSectionsDisplay();
+                    updateSectionFilters();
+                    updateShiftsDisplay();
+                    updateLogsTable();
+                    
+                    // Guardar datos
+                    saveData();
+                    localStorage.setItem('verificationLogs', JSON.stringify(verificationLogs));
+                    
+                    showStatusMessage(importExportStatus, 'Datos importados correctamente.', 'success');
+                } catch (error) {
+                    console.error('Error al importar datos:', error);
+                    showStatusMessage(importExportStatus, `Error al importar datos: ${error.message}`, 'error');
+                }
+            };
+            
+            reader.onerror = function() {
+                showStatusMessage(importExportStatus, 'Error al leer el archivo.', 'error');
+            };
+            
+            reader.readAsText(file);
+            
+            // Limpiar el input para permitir cargar el mismo archivo de nuevo
+            event.target.value = '';
+        }
+        
+        // Resetear todos los datos
+        function resetAllData() {
+            if (!confirm('¿Estás seguro de que deseas eliminar TODOS los datos? Esta acción no se puede deshacer.')) {
+                return;
+            }
+            
+            if (!confirm('ADVERTENCIA: Esto eliminará todos los turnos, personas y configuraciones. ¿Realmente deseas continuar?')) {
+                return;
+            }
+            
+            // Resetear todas las variables
+            shiftsData = {};
+            personList = [];
+            sections = ["BARRA", "GRIFO", "TOKENS"];
+            
+            // Mantener las franjas horarias pero reiniciar los turnos
+            resetShiftsData();
+            
+            // Opcionalmente, eliminar registros
+            if (confirm('¿Deseas eliminar también los registros de verificación?')) {
+                verificationLogs = [];
+                localStorage.setItem('verificationLogs', JSON.stringify(verificationLogs));
+            }
+            
+            // Actualizar visualizaciones
+            updateSectionsDisplay();
+            updateSectionFilters();
+            updateShiftsDisplay();
+            updateLogsTable();
+            
+            // Guardar datos
+            saveData();
+            
+            showStatusMessage(resetStatus, 'Todos los datos han sido eliminados correctamente.', 'success');
+        }
+        
+        // Mostrar mensaje de estado
+        function showStatusMessage(element, message, type) {
+            element.innerHTML = `<div class="status-message ${type}">${message}</div>`;
+            
+            // Desaparecer el mensaje después de 5 segundos
+            setTimeout(() => {
+                element.innerHTML = '';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
