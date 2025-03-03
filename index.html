@@ -1,63 +1,4 @@
-        // Cargar registros desde Firebase
-        function loadLogsFromFirebase() {
-            if (!firebaseInitialized || !db) {
-                showStatusMessage(logsStatus, 'Firebase no está conectado. Intenta iniciar la conexión primero.', 'error');
-                return;
-            }
-            
-            logsStatus.innerHTML = '<div class="loading"></div> Cargando registros desde Firebase...';
-            
-            db.collection('verifications')
-                .orderBy('created', 'desc')
-                .limit(100) // Limitar a los últimos 100 registros
-                .get()
-                .then((querySnapshot) => {
-                    const logs = [];
-                    querySnapshot.forEach((doc) => {
-                        logs.push(doc.data());
-                    });
-                    
-                    if (logs.length > 0) {
-                        // Combinar con registros locales
-                        const combinedLogs = [...verificationLogs];
-                        
-                        // Añadir registros de Firebase que no estén ya en locales
-                        logs.forEach(log => {
-                            // Usar fecha como clave única para comparar
-                            const exists = combinedLogs.some(existingLog => 
-                                existingLog.date === log.date && 
-                                existingLog.name === log.name
-                            );
-                            
-                            if (!exists) {
-                                combinedLogs.push(log);
-                            }
-                        });
-                        
-                        // Ordenar por fecha
-                        combinedLogs.sort((a, b) => {
-                            return new Date(b.date || 0) - new Date(a.date || 0);
-                        });
-                        
-                        verificationLogs = combinedLogs;
-                        updateLogsTable();
-                        localStorage.setItem('verificationLogs', JSON.stringify(verificationLogs));
-                        
-                        showStatusMessage(logsStatus, `Se cargaron ${logs.length} registros desde Firebase.`, 'success');
-                    } else {
-                        showStatusMessage(logsStatus, 'No hay registros nuevos en Firebase.', 'info');
-                    }
-                })
-                .catch((error) => {
-                    console.error("Error al cargar registros:", error);
-                    showStatusMessage(logsStatus, `Error al cargar registros: ${error.message}`, 'error');
-                });
-        }            <div class="card">
-                <h3>Limpiar Datos</h3>
-                <p>¡Advertencia! Esta acción eliminará todos los datos configurados.</p>
-                <button id="resetAllBtn" class="danger">Restablecer Todo</button>
-                <div id="resetStatus"></div>
-            </div><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -458,6 +399,13 @@
                 </div>
                 <input type="file" id="importFileInput" style="display: none;" accept=".json">
                 <div id="importExportStatus"></div>
+            </div>
+            
+            <div class="card">
+                <h3>Limpiar Datos</h3>
+                <p>¡Advertencia! Esta acción eliminará todos los datos configurados.</p>
+                <button id="resetAllBtn" class="danger">Restablecer Todo</button>
+                <div id="resetStatus"></div>
             </div>
         </div>
     </div>
@@ -935,6 +883,62 @@
             if (firebaseInitialized && db) {
                 saveDataToFirebase();
             }
+        }
+        
+        // FUNCIÓN QUE FALTABA: Cargar registros desde Firebase
+        function loadLogsFromFirebase() {
+            if (!firebaseInitialized || !db) {
+                showStatusMessage(logsStatus, 'Firebase no está conectado. Intenta iniciar la conexión primero.', 'error');
+                return;
+            }
+            
+            logsStatus.innerHTML = '<div class="loading"></div> Cargando registros desde Firebase...';
+            
+            db.collection('verifications')
+                .orderBy('created', 'desc')
+                .limit(100) // Limitar a los últimos 100 registros
+                .get()
+                .then((querySnapshot) => {
+                    const logs = [];
+                    querySnapshot.forEach((doc) => {
+                        logs.push(doc.data());
+                    });
+                    
+                    if (logs.length > 0) {
+                        // Combinar con registros locales
+                        const combinedLogs = [...verificationLogs];
+                        
+                        // Añadir registros de Firebase que no estén ya en locales
+                        logs.forEach(log => {
+                            // Usar fecha como clave única para comparar
+                            const exists = combinedLogs.some(existingLog => 
+                                existingLog.date === log.date && 
+                                existingLog.name === log.name
+                            );
+                            
+                            if (!exists) {
+                                combinedLogs.push(log);
+                            }
+                        });
+                        
+                        // Ordenar por fecha
+                        combinedLogs.sort((a, b) => {
+                            return new Date(b.date || 0) - new Date(a.date || 0);
+                        });
+                        
+                        verificationLogs = combinedLogs;
+                        updateLogsTable();
+                        localStorage.setItem('verificationLogs', JSON.stringify(verificationLogs));
+                        
+                        showStatusMessage(logsStatus, `Se cargaron ${logs.length} registros desde Firebase.`, 'success');
+                    } else {
+                        showStatusMessage(logsStatus, 'No hay registros nuevos en Firebase.', 'info');
+                    }
+                })
+                .catch((error) => {
+                    console.error("Error al cargar registros:", error);
+                    showStatusMessage(logsStatus, `Error al cargar registros: ${error.message}`, 'error');
+                });
         }
         
         // Generar franjas horarias
