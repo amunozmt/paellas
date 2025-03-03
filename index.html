@@ -1,10 +1,75 @@
-<!DOCTYPE html>
+        // Cargar registros desde Firebase
+        function loadLogsFromFirebase() {
+            if (!firebaseInitialized || !db) {
+                showStatusMessage(logsStatus, 'Firebase no está conectado. Intenta iniciar la conexión primero.', 'error');
+                return;
+            }
+            
+            logsStatus.innerHTML = '<div class="loading"></div> Cargando registros desde Firebase...';
+            
+            db.collection('verifications')
+                .orderBy('created', 'desc')
+                .limit(100) // Limitar a los últimos 100 registros
+                .get()
+                .then((querySnapshot) => {
+                    const logs = [];
+                    querySnapshot.forEach((doc) => {
+                        logs.push(doc.data());
+                    });
+                    
+                    if (logs.length > 0) {
+                        // Combinar con registros locales
+                        const combinedLogs = [...verificationLogs];
+                        
+                        // Añadir registros de Firebase que no estén ya en locales
+                        logs.forEach(log => {
+                            // Usar fecha como clave única para comparar
+                            const exists = combinedLogs.some(existingLog => 
+                                existingLog.date === log.date && 
+                                existingLog.name === log.name
+                            );
+                            
+                            if (!exists) {
+                                combinedLogs.push(log);
+                            }
+                        });
+                        
+                        // Ordenar por fecha
+                        combinedLogs.sort((a, b) => {
+                            return new Date(b.date || 0) - new Date(a.date || 0);
+                        });
+                        
+                        verificationLogs = combinedLogs;
+                        updateLogsTable();
+                        localStorage.setItem('verificationLogs', JSON.stringify(verificationLogs));
+                        
+                        showStatusMessage(logsStatus, `Se cargaron ${logs.length} registros desde Firebase.`, 'success');
+                    } else {
+                        showStatusMessage(logsStatus, 'No hay registros nuevos en Firebase.', 'info');
+                    }
+                })
+                .catch((error) => {
+                    console.error("Error al cargar registros:", error);
+                    showStatusMessage(logsStatus, `Error al cargar registros: ${error.message}`, 'error');
+                });
+        }            <div class="card">
+                <h3>Limpiar Datos</h3>
+                <p>¡Advertencia! Esta acción eliminará todos los datos configurados.</p>
+                <button id="resetAllBtn" class="danger">Restablecer Todo</button>
+                <div id="resetStatus"></div>
+            </div><!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Verificación de Turnos</title>
     <!-- Cargar bibliotecas de terceros -->
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    
+    <!-- Bibliotecas principales -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <!-- Agregar jsQR correctamente -->
@@ -370,6 +435,22 @@
             </div>
             
             <div class="card">
+                <h3>Configuración de Firebase</h3>
+                <p>Para compartir datos entre usuarios, configura Firebase:</p>
+                <div class="form-row">
+                    <label for="firebaseProjectId">ID del Proyecto:</label>
+                    <input type="text" id="firebaseProjectId" placeholder="project-id" value="paellas-761cb">
+                </div>
+                <div class="form-row">
+                    <label for="firebaseApiKey">API Key:</label>
+                    <input type="text" id="firebaseApiKey" placeholder="AIzaSyA..." value="AIzaSyCZ6rFm2nAqgomWCgcFX0pgJSuo5RIzyoA">
+                </div>
+                <button id="saveFirebaseConfig" class="secondary">Guardar Configuración</button>
+                <button id="connectFirebase" class="secondary">Conectar</button>
+                <div id="firebaseStatus"></div>
+            </div>
+            
+            <div class="card">
                 <h3>Importar / Exportar Datos</h3>
                 <div class="actions">
                     <button id="exportDataBtn" class="secondary">Exportar Todos los Datos</button>
@@ -377,13 +458,6 @@
                 </div>
                 <input type="file" id="importFileInput" style="display: none;" accept=".json">
                 <div id="importExportStatus"></div>
-            </div>
-            
-            <div class="card">
-                <h3>Limpiar Datos</h3>
-                <p>¡Advertencia! Esta acción eliminará todos los datos configurados.</p>
-                <button id="resetAllBtn" class="danger">Restablecer Todo</button>
-                <div id="resetStatus"></div>
             </div>
         </div>
     </div>
@@ -458,12 +532,18 @@
             
             <div class="camera-section">
                 <h3>O escanea el código QR:</h3>
-                <button id="startCamera">Abrir Cámara</button>
-                <button id="stopCamera" disabled>Cerrar Cámara</button>
+                <div class="actions">
+                    <button id="startCamera">Abrir Cámara</button>
+                    <button id="stopCamera" disabled>Cerrar Cámara</button>
+                </div>
                 <div id="cameraStatus"></div>
                 
                 <div id="cameraContainer" class="hidden">
-                    <video id="video" autoplay></video>
+                    <p style="text-align: center; margin-bottom: 10px;">Centra el código QR en la cámara</p>
+                    <div style="position: relative;">
+                        <video id="video" autoplay playsinline></video>
+                        <div id="scanOverlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; align-items: center; background-color: rgba(0,0,0,0.7); color: white; font-size: 24px; opacity: 0; transition: opacity 0.3s; pointer-events: none;"></div>
+                    </div>
                     <canvas id="canvas" style="display: none;"></canvas>
                 </div>
             </div>
@@ -481,6 +561,7 @@
             <p>Historial de verificaciones realizadas:</p>
             <div class="actions">
                 <button id="downloadLogs">Descargar Registros (Excel)</button>
+                <button id="syncLogs">Sincronizar con Firebase</button>
                 <button id="clearLogs" class="danger">Limpiar Registros</button>
             </div>
             <div id="logsStatus"></div>
@@ -568,6 +649,7 @@
             searchButton.addEventListener('click', searchPerson);
             personSearchInput.addEventListener('input', updatePersonListSearch);
             downloadLogsButton.addEventListener('click', downloadLogsAsExcel);
+            document.getElementById('syncLogs').addEventListener('click', loadLogsFromFirebase);
             clearLogsButton.addEventListener('click', clearAllLogs);
             exportDataBtn.addEventListener('click', exportAllData);
             importDataBtn.addEventListener('click', () => importFileInput.click());
@@ -617,6 +699,7 @@
         
         // Cargar datos almacenados
         function loadStoredData() {
+            // Cargar URLs
             const savedShifts = localStorage.getItem('shiftsData');
             const savedPersons = localStorage.getItem('personList');
             const savedTimeSlots = localStorage.getItem('timeSlots');
@@ -648,14 +731,210 @@
                 verificationLogs = JSON.parse(savedLogs);
                 updateLogsTable();
             }
+            
+            // Intentar inicializar Firebase automáticamente si hay configuración
+            const savedFirebaseConfig = localStorage.getItem('firebaseConfig');
+            if (savedFirebaseConfig) {
+                initFirebase();
+            }
         }
         
-        // Guardar datos
+        // Firebase variables
+        let db = null;
+        let firebaseInitialized = false;
+        
+        // Firebase configuration elements
+        const firebaseProjectIdInput = document.getElementById('firebaseProjectId');
+        const firebaseApiKeyInput = document.getElementById('firebaseApiKey');
+        const saveFirebaseConfigBtn = document.getElementById('saveFirebaseConfig');
+        const connectFirebaseBtn = document.getElementById('connectFirebase');
+        const firebaseStatus = document.getElementById('firebaseStatus');
+        
+        // Configuración predeterminada de Firebase
+        const defaultFirebaseConfig = {
+            projectId: "paellas-761cb",
+            apiKey: "AIzaSyCZ6rFm2nAqgomWCgcFX0pgJSuo5RIzyoA",
+            authDomain: "paellas-761cb.firebaseapp.com",
+            storageBucket: "paellas-761cb.firebasestorage.app",
+            messagingSenderId: "467715506811",
+            appId: "1:467715506811:web:1f0480a253748222a898de"
+        };
+        
+        // Intentar cargar configuración de Firebase o usar la predeterminada
+        const savedFirebaseConfig = localStorage.getItem('firebaseConfig');
+        if (savedFirebaseConfig) {
+            const config = JSON.parse(savedFirebaseConfig);
+            firebaseProjectIdInput.value = config.projectId || defaultFirebaseConfig.projectId;
+            firebaseApiKeyInput.value = config.apiKey || defaultFirebaseConfig.apiKey;
+        } else {
+            // Si no hay configuración guardada, guardar la predeterminada
+            localStorage.setItem('firebaseConfig', JSON.stringify(defaultFirebaseConfig));
+        }
+        
+        // Event listeners para Firebase
+        saveFirebaseConfigBtn.addEventListener('click', saveFirebaseConfig);
+        connectFirebaseBtn.addEventListener('click', initFirebase);
+        
+        // Guardar configuración de Firebase
+        function saveFirebaseConfig() {
+            const projectId = firebaseProjectIdInput.value.trim();
+            const apiKey = firebaseApiKeyInput.value.trim();
+            
+            if (!projectId || !apiKey) {
+                showStatusMessage(firebaseStatus, 'Por favor, completa todos los campos.', 'error');
+                return;
+            }
+            
+            const config = {
+                projectId: projectId,
+                apiKey: apiKey
+            };
+            
+            localStorage.setItem('firebaseConfig', JSON.stringify(config));
+            showStatusMessage(firebaseStatus, 'Configuración guardada. Haz clic en "Conectar" para iniciar.', 'success');
+        }
+        
+        // Inicializar Firebase
+        function initFirebase() {
+            // Verificar si ya está inicializado
+            if (firebaseInitialized) {
+                showStatusMessage(firebaseStatus, 'Firebase ya está conectado.', 'info');
+                return;
+            }
+            
+            const savedConfig = localStorage.getItem('firebaseConfig');
+            let config;
+            
+            if (savedConfig) {
+                config = JSON.parse(savedConfig);
+            } else {
+                // Si no hay configuración guardada, usar la predeterminada
+                config = defaultFirebaseConfig;
+                localStorage.setItem('firebaseConfig', JSON.stringify(config));
+            }
+            
+            try {
+                // Configurar Firebase
+                const firebaseConfig = {
+                    apiKey: config.apiKey,
+                    projectId: config.projectId,
+                    authDomain: `${config.projectId}.firebaseapp.com`,
+                    appId: config.appId || null,
+                    messagingSenderId: config.messagingSenderId || null,
+                    storageBucket: config.storageBucket || null,
+                };
+                
+                showStatusMessage(firebaseStatus, 'Conectando a Firebase...', 'info');
+                
+                // Inicializar Firebase
+                firebase.initializeApp(firebaseConfig);
+                
+                // Iniciar sesión anónima
+                firebase.auth().signInAnonymously()
+                    .then(() => {
+                        // Inicializar Firestore
+                        db = firebase.firestore();
+                        firebaseInitialized = true;
+                        showStatusMessage(firebaseStatus, 'Conectado a Firebase correctamente.', 'success');
+                        
+                        // Cargar datos de Firebase
+                        loadDataFromFirebase();
+                    })
+                    .catch((error) => {
+                        console.error("Error de autenticación:", error);
+                        showStatusMessage(firebaseStatus, `Error de autenticación: ${error.message}`, 'error');
+                    });
+            } catch (error) {
+                console.error("Error al inicializar Firebase:", error);
+                showStatusMessage(firebaseStatus, `Error al inicializar Firebase: ${error.message}`, 'error');
+            }
+        }
+        
+        // Cargar datos desde Firebase
+        function loadDataFromFirebase() {
+            if (!firebaseInitialized || !db) return;
+            
+            showStatusMessage(firebaseStatus, 'Cargando datos desde Firebase...', 'info');
+            
+            // Cargar configuración
+            db.collection('config').doc('settings').get()
+                .then((doc) => {
+                    if (doc.exists) {
+                        const data = doc.data();
+                        
+                        // Cargar secciones si existen
+                        if (data.sections && Array.isArray(data.sections)) {
+                            sections = data.sections;
+                        }
+                        
+                        // Cargar franjas horarias si existen
+                        if (data.timeSlots && Array.isArray(data.timeSlots)) {
+                            timeSlots = data.timeSlots;
+                        }
+                        
+                        // Actualizar interfaz
+                        updateSectionsDisplay();
+                        updateSectionFilters();
+                        updateShiftTimeSelect();
+                    }
+                    
+                    // Cargar turnos
+                    return db.collection('shifts').doc('data').get();
+                })
+                .then((doc) => {
+                    if (doc.exists) {
+                        shiftsData = doc.data().shiftsData || {};
+                    }
+                    
+                    // Actualizar lista de personas
+                    refreshPersonList();
+                    updateShiftsDisplay();
+                    
+                    showStatusMessage(firebaseStatus, 'Datos cargados correctamente desde Firebase.', 'success');
+                })
+                .catch((error) => {
+                    console.error("Error al cargar datos:", error);
+                    showStatusMessage(firebaseStatus, `Error al cargar datos: ${error.message}`, 'error');
+                });
+        }
+        
+        // Guardar datos en Firebase
+        function saveDataToFirebase() {
+            if (!firebaseInitialized || !db) return;
+            
+            // Guardar configuración
+            db.collection('config').doc('settings').set({
+                sections: sections,
+                timeSlots: timeSlots,
+                lastUpdate: new Date()
+            })
+            .then(() => {
+                // Guardar turnos
+                return db.collection('shifts').doc('data').set({
+                    shiftsData: shiftsData,
+                    lastUpdate: new Date()
+                });
+            })
+            .then(() => {
+                console.log("Datos guardados en Firebase");
+            })
+            .catch((error) => {
+                console.error("Error al guardar datos:", error);
+            });
+        }
+        
+        // Modificar saveData para usar Firebase cuando esté disponible
         function saveData() {
+            // Guardar en localStorage siempre (como respaldo)
             localStorage.setItem('shiftsData', JSON.stringify(shiftsData));
             localStorage.setItem('personList', JSON.stringify(personList));
             localStorage.setItem('timeSlots', JSON.stringify(timeSlots));
             localStorage.setItem('sections', JSON.stringify(sections));
+            
+            // Si Firebase está disponible, guardar también allí
+            if (firebaseInitialized && db) {
+                saveDataToFirebase();
+            }
         }
         
         // Generar franjas horarias
@@ -1086,19 +1365,35 @@
             try {
                 cameraStatus.innerHTML = '<div class="loading"></div> Iniciando cámara...';
                 
-                const constraints = {
-                    video: {
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                };
+                // Primero verificar si mediaDevices está disponible
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error("Tu navegador no soporta acceso a la cámara");
+                }
                 
-                videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+                let constraints;
+                // Intentar primero con la cámara trasera (si está en móvil)
+                try {
+                    constraints = {
+                        video: {
+                            facingMode: {exact: 'environment'}, // Intentar forzar cámara trasera
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    };
+                    videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+                } catch (backCameraError) {
+                    // Si falla, intentar con cualquier cámara disponible
+                    console.log("No se pudo acceder a la cámara trasera, intentando con cualquier cámara");
+                    constraints = {
+                        video: true // Cualquier cámara disponible
+                    };
+                    videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+                }
+                
                 video.srcObject = videoStream;
                 cameraContainer.classList.remove('hidden');
                 scanResult.classList.add('hidden');
-                cameraStatus.innerHTML = '';
+                cameraStatus.innerHTML = '<p class="status-message success">Cámara activada. Apunta al código QR.</p>';
                 
                 startCameraButton.disabled = true;
                 stopCameraButton.disabled = false;
@@ -1108,7 +1403,28 @@
             } catch (error) {
                 console.error('Error al acceder a la cámara:', error);
                 videoStream = null;
-                cameraStatus.innerHTML = `<p class="status-message error">No se pudo acceder a la cámara: ${error.message}<br>Usa la búsqueda por nombre como alternativa.</p>`;
+                
+                let errorMsg = "Error desconocido";
+                
+                // Mensajes de error específicos basados en el tipo de error
+                if (error.name === "NotReadableError" || error.name === "TrackStartError") {
+                    errorMsg = "No se pudo acceder a la cámara. Puede que esté siendo usada por otra aplicación o que haya un problema con el hardware.";
+                } else if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+                    errorMsg = "Permiso para usar la cámara denegado. Por favor, concede permisos desde la configuración de tu navegador.";
+                } else if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+                    errorMsg = "No se detectó ninguna cámara en tu dispositivo.";
+                } else if (error.name === "SecurityError") {
+                    errorMsg = "No se pudo acceder a la cámara debido a razones de seguridad.";
+                } else if (error.name === "AbortError") {
+                    errorMsg = "Se interrumpió el acceso a la cámara.";
+                } else {
+                    errorMsg = error.message || "No se pudo iniciar la cámara";
+                }
+                
+                cameraStatus.innerHTML = `
+                    <p class="status-message error">${errorMsg}</p>
+                    <p class="status-message info">Por favor, usa la búsqueda por nombre como alternativa.</p>
+                `;
             }
         }
         
@@ -1134,7 +1450,8 @@
         // Escanear código QR
         function scanQRCode() {
             if (!jsQRAvailable) return;
-            if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+            if (!video || !video.srcObject) return;
+            if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
             
             try {
                 const videoWidth = video.videoWidth;
@@ -1142,14 +1459,39 @@
                 
                 if (!videoWidth || !videoHeight) return;
                 
-                canvas.width = videoWidth;
-                canvas.height = videoHeight;
+                // Usar un tamaño más pequeño para mejorar el rendimiento
+                const scaleFactor = 0.5; // Procesar a la mitad del tamaño
+                const scaledWidth = videoWidth * scaleFactor;
+                const scaledHeight = videoHeight * scaleFactor;
+                
+                canvas.width = scaledWidth;
+                canvas.height = scaledHeight;
                 
                 const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
+                // Limpiar el canvas antes de dibujar
+                ctx.clearRect(0, 0, scaledWidth, scaledHeight);
+                // Dibujar la imagen escalada
+                ctx.drawImage(video, 0, 0, scaledWidth, scaledHeight);
                 
-                const imageData = ctx.getImageData(0, 0, videoWidth, videoHeight);
-                const code = jsQR(imageData.data, videoWidth, videoHeight);
+                const imageData = ctx.getImageData(0, 0, scaledWidth, scaledHeight);
+                
+                // Intentar varias configuraciones de jsQR para mejorar detección
+                let code = null;
+                // Intento normal
+                code = jsQR(imageData.data, scaledWidth, scaledHeight);
+                
+                // Si no se detecta, intentar con inversión (algunas cámaras tienen problemas)
+                if (!code) {
+                    // Invertir colores (puede ayudar con cámaras con problemas de contraste)
+                    const data = imageData.data;
+                    for (let i = 0; i < data.length; i += 4) {
+                        data[i] = 255 - data[i];     // R
+                        data[i + 1] = 255 - data[i + 1]; // G
+                        data[i + 2] = 255 - data[i + 2]; // B
+                        // Alpha se mantiene igual
+                    }
+                    code = jsQR(data, scaledWidth, scaledHeight);
+                }
                 
                 if (code) {
                     // Detener el escaneo una vez que se encuentra un código
@@ -1159,6 +1501,24 @@
                     const personName = code.data;
                     console.log('QR escaneado:', personName);
                     
+                    // Mostrar feedback visual inmediato
+                    const scanOverlay = document.getElementById('scanOverlay');
+                    scanOverlay.innerHTML = `<div style="text-align:center">
+                        <div style="font-size: 36px;">✓</div>
+                        <div>QR detectado</div>
+                        <div style="font-size: 18px; margin-top: 10px;">${personName}</div>
+                        <div style="font-size: 14px; margin-top: 10px;">Verificando turno...</div>
+                    </div>`;
+                    scanOverlay.style.opacity = '1';
+                    
+                    // Reproducir sonido de confirmación si está disponible
+                    try {
+                        const beep = new Audio('data:audio/mp3;base64,SUQzAwAAAAABdlRJVDIAAAAZAAADQXVkaW8gcmVjb3JkZWQgd2l0aCBTb3VuZFRhcAA=');
+                        beep.play();
+                    } catch (e) {
+                        // Si el sonido no funciona, no hacemos nada
+                    }
+                    
                     // Verificar si la persona está en su turno
                     checkSchedule(personName);
                 }
@@ -1166,7 +1526,8 @@
                 console.error('Error al escanear QR:', error);
                 clearInterval(scanInterval);
                 scanInterval = null;
-                cameraStatus.innerHTML = `<p class="status-message error">Error al escanear QR: ${error.message}</p>`;
+                cameraStatus.innerHTML = `<p class="status-message error">Error al escanear QR: ${error.message}</p>
+                <p class="status-message info">Intenta reiniciar la cámara o usa la búsqueda por nombre.</p>`;
             }
         }
         
@@ -1257,12 +1618,14 @@
                 } else if (matches.length > 1) {
                     // Si hay múltiples coincidencias, informar
                     showResult(false, personName, `Nombre ambiguo: coincide con ${matches.length} personas. Por favor, proporciona un nombre más específico.`);
+                    updateScanOverlay(false, `Nombre ambiguo: coincide con ${matches.length} personas`);
                     return;
                 }
             }
             
             if (!matchedPerson) {
                 showResult(false, personName, 'Persona no encontrada en la lista de turnos.');
+                updateScanOverlay(false, 'Persona no encontrada');
                 return;
             }
             
@@ -1283,6 +1646,7 @@
             
             if (sectionsToCheck.length === 0) {
                 showResult(false, personName, 'Por favor, selecciona al menos una sección para verificar.');
+                updateScanOverlay(false, 'No hay secciones seleccionadas');
                 return;
             }
             
@@ -1318,13 +1682,16 @@
             // Mostrar el resultado
             if (isInCurrentShift) {
                 showResult(true, personName, `Turno confirmado: ${currentShiftInfo}`);
+                updateScanOverlay(true, `TURNO VÁLIDO<br>${currentShiftInfo}`);
                 logVerification(personName, true, currentShiftInfo);
             } else {
                 if (allShifts.length > 0) {
                     const shiftsInfo = allShifts.join('<br>');
                     showResult(false, personName, `No tiene turno asignado en este momento.<br>Turnos programados:<br>${shiftsInfo}`);
+                    updateScanOverlay(false, "SIN TURNO ACTUAL");
                 } else {
                     showResult(false, personName, `No tiene turnos asignados en las secciones seleccionadas.`);
+                    updateScanOverlay(false, "NO ESTÁ EN LA LISTA");
                 }
                 
                 logVerification(personName, false, 'Sin turno actual');
@@ -1334,9 +1701,42 @@
             if (videoStream) {
                 setTimeout(() => {
                     if (videoStream) {
+                        // Ocultar la superposición
+                        const scanOverlay = document.getElementById('scanOverlay');
+                        scanOverlay.style.opacity = '0';
+                        
+                        // Reiniciar el escaneo
                         scanInterval = setInterval(scanQRCode, 500);
                     }
                 }, 3000);
+            }
+        }
+        
+        // Actualizar la superposición del escaneo
+        function updateScanOverlay(isValid, message) {
+            if (!videoStream) return;
+            
+            const scanOverlay = document.getElementById('scanOverlay');
+            const color = isValid ? '#4CAF50' : '#f44336';
+            const icon = isValid ? '✓' : '✗';
+            
+            scanOverlay.innerHTML = `<div style="text-align:center; padding: 15px; background-color: rgba(0,0,0,0.8); border-radius: 8px; border: 2px solid ${color};">
+                <div style="font-size: 48px; color: ${color};">${icon}</div>
+                <div style="font-size: 24px; color: ${color}; margin-bottom: 10px;">${isValid ? 'VÁLIDO' : 'NO VÁLIDO'}</div>
+                <div style="font-size: 18px; color: white;">${message}</div>
+            </div>`;
+            
+            scanOverlay.style.opacity = '1';
+            
+            // Reproducir sonido según el resultado
+            try {
+                const audio = new Audio(isValid ? 
+                    'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tAwAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAAElgC1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAZaAAAAAAAABJYxSiD2AAAAAAD/+xDEAAPAAAGkAAAAIAAANIAAAARMQU1FMy4xMDAEqgAAAAAAAAAAVGFnAHRhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ//7EMSRA8AAAaQAAAAgAAA0gAAABHRhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ//7EmRDj/AAAGVAAAAIAEAN4AAAAE3RhZzRhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3Rhg=' : 
+                    'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tAwAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAAElgC1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAYFAAAAAAAABJZA74iUAAAAAAD/+xDEAAPAAAGkAAAAIAAANIAAAARMQU1FMy4xMDAEqgAAAAAAAAAAVGFnAHRhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ//7EMSRA8AAAaQAAAAgAAA0gAAABHRhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ//7EmRDj/AAAGVAAAAIAEAN4AAAAE3RhZzRhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3RhZ3Rhg=');
+                audio.volume = 0.5;
+                audio.play();
+            } catch (e) {
+                // Si el sonido no funciona, no hacemos nada
             }
         }
         
@@ -1373,7 +1773,8 @@
                 timestamp: now.toLocaleString(),
                 name: personName,
                 status: isSuccess ? 'VÁLIDO' : 'INVÁLIDO',
-                details: details
+                details: details,
+                date: now.toISOString()
             };
             
             verificationLogs.push(logEntry);
@@ -1381,6 +1782,17 @@
             
             // Guardar en localStorage
             localStorage.setItem('verificationLogs', JSON.stringify(verificationLogs));
+            
+            // Si Firebase está disponible, guardar el registro
+            if (firebaseInitialized && db) {
+                db.collection('verifications').add({
+                    ...logEntry,
+                    created: firebase.firestore.FieldValue.serverTimestamp()
+                })
+                .catch(error => {
+                    console.error('Error al guardar verificación en Firebase:', error);
+                });
+            }
         }
         
         // Actualizar la tabla de registros
